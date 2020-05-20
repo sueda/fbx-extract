@@ -41,6 +41,7 @@ The animation file has the following format.
 
 - GLM <https://glm.g-truc.net/0.9.9/index.html>
 - OpenFBX (included) <https://github.com/nem0/OpenFBX>
+- miniz (included) <https://github.com/richgel999/miniz>
 
 
 # TODO
