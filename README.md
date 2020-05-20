@@ -1,5 +1,4 @@
 # fbx-extract
-Extracts data from an FBX file
 
 This program parses an FBX file and writes three types of output files.
 
@@ -41,9 +40,10 @@ The animation file has the following format.
 # Libraries used
 
 - GLM <https://glm.g-truc.net/0.9.9/index.html>
-- OpenFBX <https://github.com/nem0/OpenFBX>
+- OpenFBX (included) <https://github.com/nem0/OpenFBX>
 
 
 # TODO
 
-- Extract textures from the FBX file. Currently, you need to extract them manually using Blender.
+- Extract textures from the FBX file. Currently, you need to extract them manually using an external program, such as Blender.
+- Add support for using FBX files with only skeletal animation data. Currently, the FBX file must contain geometry, skinning, and animation data. This means that to download new animations for an existing character, you need to download another FBX file with redundant information.
