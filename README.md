@@ -11,7 +11,14 @@ The input FBX file can be downloaded from [Mixamo](mixamo.com).
 
 ## Output files
 
-The skinning file has the following format.
+### Geomety
+- A standard OBJ file with vertex positions, normals, and texture coordinates.
+- Faces are triangulated.
+- Common vertices are merged.
+
+
+### Skinning weights
+
 - Comments start with '#'.
 - The first line has three integers:
   - Vertex count: should be the same as the corresponding OBJ file
@@ -28,7 +35,9 @@ The skinning file has the following format.
 2 19 0.037664 20 0.962336 
 ```
 
-The animation file has the following format.
+
+### Skeletal animation
+
 - Comments start with '#'.
 - The first line has two integers:
   - Frame count: the number of frames in the animation
