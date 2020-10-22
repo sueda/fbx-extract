@@ -723,7 +723,7 @@ string getFileName(const string& s)
 int main(int argc, char **argv)
 {
 	if(argc < 2) {
-		cout << "Usage: fbx-convert <FBX_FILE>" << endl;
+		cout << "Usage: fbx-extract <FBX_FILE>" << endl;
 		return -1;
 	}
 	
