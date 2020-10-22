@@ -9,6 +9,19 @@ This program parses an FBX file and writes three types of output files.
 The input FBX file can be downloaded from [Mixamo](mixamo.com).
 
 
+## Building and running
+
+Run `cmake` and `make` to build the project, and run with the fbx file as an argument:
+
+```
+> mkdir build
+> cd build
+> cmake ..
+> make
+> ./fbx-extract <FBX_FILE>
+```
+
+
 ## Output files
 
 ### Geomety
