@@ -11,7 +11,13 @@ The input FBX file can be downloaded from [Mixamo](mixamo.com).
 
 ## Building and running
 
-Run `cmake` and `make` to build the project, and run with the fbx file as an argument:
+This project builds on top of the following projects:
+
+- [GLM](https://glm.g-truc.net/0.9.9/)
+- [OpenFBX](https://github.com/nem0/OpenFBX) (included)
+- [miniz](https://github.com/richgel999/miniz) (included)
+
+To build the project, run `cmake` and `make`, and then run with the fbx file as an argument:
 
 ```
 > mkdir build
@@ -63,12 +69,6 @@ Run `cmake` and `make` to build the project, and run with the fbx file as an arg
 0.000000 0.000000 0.000000 1.000000 0.000000 96.330055 9.825774 ...
 0.008630 0.039924 0.024404 0.998867 0.657645 87.535782 2.391427 ...
 ```
-
-## Libraries used
-
-- [GLM](https://glm.g-truc.net/0.9.9/)
-- [OpenFBX](https://github.com/nem0/OpenFBX) (included)
-- [miniz](https://github.com/richgel999/miniz) (included)
 
 
 ## TODO
