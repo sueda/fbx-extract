@@ -11,8 +11,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include "ofbx.h"
+#include <math.h>
 
 using namespace std;
 using namespace glm;
@@ -21,6 +23,16 @@ using namespace glm;
 // https://github.com/Larry955/FbxParser/tree/master/FbxParser
 
 string FILENAME;
+string TEXTURENAME;
+
+vector<const ofbx::Cluster*> clusters;
+vector<int> clusters_index;
+
+vector<const ofbx::Object*> limbVec;
+map<const ofbx::Object*, int> limbMap;
+vector<int> limbParents;
+
+int key_count_max = -1;
 
 class MyVertex
 {
@@ -92,10 +104,135 @@ public:
 
 vector<MyMesh> myMeshes;
 
+vector<const ofbx::IElement*> find_element(const ofbx::IElement* parent_element, const string& id) {
+	vector<const ofbx::IElement*> elements;
+	char string_id[32];
+	const ofbx::IElement* child = parent_element->getFirstChild();
+	if (child == nullptr) {
+		return elements;
+	}
+	while (child != nullptr) {
+		vector<const ofbx::IElement*> find_results = find_element(child, id);
+		if (find_results.size() != 0) {
+			elements.insert(elements.begin(), find_results.begin(), find_results.end());
+		}
+		child->getID().toString(string_id);
+		if (string(string_id, id.length()) == id) {
+			elements.push_back(child);
+		}
+		child = child->getSibling();
+	}
+	return elements;
+}
+
+const ofbx::IElement* find_child(const ofbx::IElement& element, const char* id)
+{
+	const ofbx::IElement* iter = element.getFirstChild();
+	while (iter != nullptr)
+	{
+		if (iter->getID() == id) return iter;
+		iter = iter->getSibling();
+	}
+	return nullptr;
+}
+
+ofbx::IElement* find_property(const ofbx::IElement& obj, const char* name)
+{
+	const ofbx::IElement* props = find_child(obj, "Properties70");
+	if (!props) return nullptr;
+
+	ofbx::IElement* prop = props->getFirstChild();
+	while (prop)
+	{
+		if (prop->getFirstProperty() && prop->getFirstProperty()->getValue() == name)
+		{
+			return prop;
+		}
+		prop = prop->getSibling();
+	}
+	return nullptr;
+}
+
+glm::vec3 get_vector(const ofbx::IElement* property) {
+	const ofbx::IElementProperty* iter = property->getFirstProperty();
+	while (iter != nullptr && iter->getType() != ofbx::IElementProperty::Type::DOUBLE) {
+		iter = iter->getNext();
+	}
+	glm::vec3 vec = glm::vec3(0.0f, 0.0f, 0.0f);
+	if (iter == nullptr) {
+		return vec;
+	}
+	for (int i = 0; i < 3; i++) {
+		vec[i] = iter->getValue().toDouble();
+		iter = iter->getNext();
+	}
+	return vec;
+}
+
+glm::mat4 get_T_matrix(const ofbx::IScene* scene, const char* mesh_name) {
+	glm::mat4 transform_matrix = glm::mat4(1.0);
+	const ofbx::IElement* root = scene->getRootElement();
+	const ofbx::IElement* child = root->getFirstChild();
+	vector<const ofbx::IElement*> models = find_element(root, "Model");
+	for (auto model : models) {
+		ofbx::DataView texture_name = model->getFirstProperty()->getNext()->getValue();
+
+		string name;
+		for (long i = 0; i < texture_name.end - texture_name.begin; i++) {
+			char c = static_cast<char>(*(texture_name.begin + i));
+			if (c == '\0') {
+				break;
+			}
+			name += c;
+		}
+		//cout << name << endl;
+
+		if (name == mesh_name) {
+			//cout << model->getFirstChild()->getID() << endl;
+			const ofbx::IElement* translation = find_property(*model, "Lcl Translation");
+			const ofbx::IElement* rotation = find_property(*model, "Lcl Rotation");
+			const ofbx::IElement* scaling = find_property(*model, "Lcl Scaling");
+			glm::vec3 trans_vec = glm::vec3(0.0f, 0.0f, 0.0f);
+			glm::vec3 rotation_vec = glm::vec3(0.0f, 0.0f, 0.0f);
+			glm::vec3 scaling_vec = glm::vec3(1.0f, 1.0f, 1.0f);
+
+			if (translation) {
+				trans_vec = get_vector(translation);
+			}
+			if (rotation) {
+				rotation_vec = get_vector(rotation);
+			}
+			if (scaling) {
+				scaling_vec = get_vector(scaling);
+			}
+
+			mat4 I = mat4(1.0);
+			float x = rotation_vec.x * M_PI / 180.0f;
+			float y = rotation_vec.y * M_PI / 180.0f;
+			float z = rotation_vec.z * M_PI / 180.0f;
+			mat4 Rx = rotate(I, x, vec3(1.0, 0.0, 0.0));
+			mat4 Ry = rotate(I, y, vec3(0.0, 1.0, 0.0));
+			mat4 Rz = rotate(I, z, vec3(0.0, 0.0, 1.0));
+			mat4 R = I;
+			R = Rz * Ry * Rx;
+			transform_matrix = glm::translate(transform_matrix, trans_vec) * R;
+			transform_matrix = glm::scale(transform_matrix, scaling_vec);
+			/*
+			cout << "(" << trans_vec.x  << ", " << trans_vec.y << ", " << trans_vec.z << ")" << endl;
+			cout << "(" << rotation_vec.x << ", " << rotation_vec.y << ", " << rotation_vec.z << ")" << endl;
+			cout << "(" << scaling_vec.x << ", " << scaling_vec.y << ", " << scaling_vec.z << ")" << endl;
+			*/
+
+		}
+	}
+	return transform_matrix;
+}
+
 bool saveGeom(const ofbx::IScene *scene)
 {
 	cout << "=== geometry ===" << endl;
 	int mesh_count = scene->getMeshCount();
+	
 	myMeshes.resize(mesh_count);
 	for (int k = 0; k < mesh_count; ++k) {
 		const ofbx::Mesh *mesh = scene->getMesh(k);
@@ -107,14 +244,23 @@ bool saveGeom(const ofbx::IScene *scene)
 		replace(myMeshes[k].name.begin(), myMeshes[k].name.end(), ':', '_');
 		replace(myMeshes[k].name.begin(), myMeshes[k].name.end(), '/', '_');
 		
+		//Get the transform matrix for this mesh from original pose to binding pose
+		glm::mat4 transform_matrix = get_T_matrix(scene, mesh->name);
+
 		myMeshes[k].verts.resize(vertex_count);
 		auto &verts = myMeshes[k].verts;
 		const ofbx::Vec3* vertices = geom->getVertices();
 		for (int i = 0; i < vertex_count; ++i) {
 			const ofbx::Vec3 &v = vertices[i];
+			glm::vec4 transformed_vertices = transform_matrix * vec4(v.x, v.y, v.z, 1.0f);
+			verts[i].p.x = transformed_vertices.x;
+			verts[i].p.y = transformed_vertices.y;
+			verts[i].p.z = transformed_vertices.z;
+			/*
 			verts[i].p.x = v.x;
 			verts[i].p.y = v.y;
 			verts[i].p.z = v.z;
+			*/
 		}
 
 		bool has_normals = geom->getNormals() != nullptr;
@@ -234,22 +380,7 @@ bool saveSkin(const ofbx::IScene *scene)
 	int mesh_count = scene->getMeshCount();
 	assert(mesh_count == myMeshes.size());
 	int cluster_count = 0;
-	for(int i = 0; i < mesh_count; ++i) {
-		const ofbx::Mesh *mesh = scene->getMesh(i);
-		const ofbx::Geometry *geom = mesh->getGeometry();
-		const ofbx::Skin *skin = geom->getSkin();
-		cout << mesh->name << ": ";
-		int vertex_count = geom->getVertexCount();
-		cout << vertex_count << " vertices" << endl;
-		int cluster_count_ = skin->getClusterCount();
-
-		// All meshes have the same number of clusters
-		if(i == 0) {
-			cluster_count = cluster_count_;
-		} else {
-			assert(cluster_count_ == cluster_count);
-		}
-	}
+	int max_cluster_count = 0;
 
 	// Populate attachment info
 	for(int i = 0; i < mesh_count; ++i) {
@@ -258,6 +389,14 @@ bool saveSkin(const ofbx::IScene *scene)
 		const ofbx::Skin *skin = geom->getSkin();
 		myMeshes[i].maxInfluences = 0;
 		auto &verts = myMeshes[i].verts;
+		auto& verts_map = myMeshes[i].vertsUniqueMap;
+		if (skin == nullptr) {
+			continue;
+		}
+		cluster_count = skin->getClusterCount();
+		if (cluster_count > max_cluster_count) {
+			max_cluster_count = cluster_count;
+		}
 		for(int j = 0; j < cluster_count; ++j) {
 			const ofbx::Cluster *cluster = skin->getCluster(j);
 			int indices_count = cluster->getIndicesCount();
@@ -266,18 +405,25 @@ bool saveSkin(const ofbx::IScene *scene)
 			if(weights_count > 0) {
 				const int *indices = cluster->getIndices();
 				const double *weights = cluster->getWeights();
+				const ofbx::Object* limb = cluster->getLink();
+				assert(limbMap.find(limb) != limbMap.end());
+				// Store the clusters and their corrseonding indices for skeleton extraction later
+				clusters_index.push_back(limbMap[limb]);
+				clusters.push_back(cluster);
 				for(int k = 0; k < weights_count; ++k) {
 					int index = indices[k];
 					double weight = weights[k];
 					assert(index < geom->getVertexCount());
-					assert(0.0 <= weight && weight <= 1.0);
+
+					// Error may exist in float comparison. Assume that all weights are correct
+					//assert(0.0 <= weight && weight <= 1.0);
 					verts[index].w.push_back(weight);
-					verts[index].i.push_back(j);
+					verts[index].i.push_back(clusters.size() - 1);
 					if(verts[index].i.size() > myMeshes[i].maxInfluences) {
 						myMeshes[i].maxInfluences = (int)verts[index].i.size();
 					}
 				}
-			}
+			}			
 		}
 	}
 	
@@ -297,7 +443,7 @@ bool saveSkin(const ofbx::IScene *scene)
 		fprintf(fp, "# Each subsequent line corresponds to a vertex.\n");
 		fprintf(fp, "# In each line, the first number is the number of bone influences for the vertex.\n");
 		fprintf(fp, "# The next numbers are \"influence\" pairs of {bone index, bone weight}.\n");
-		fprintf(fp, "%d %d %d\n", vertex_count, cluster_count, mesh.maxInfluences);
+		fprintf(fp, "%d %d %d\n", vertex_count, clusters_index.size(), mesh.maxInfluences);
 		for(int i : vertsUnique) {
 			const MyVertex &v = verts[i];
 			int influences = v.w.size();
@@ -316,7 +462,7 @@ bool saveSkin(const ofbx::IScene *scene)
 
 void traverseAll(const ofbx::Object *object, int depth)
 {
-	int depthMax = 6; // -1 to disable
+	int depthMax = 8; // -1 to disable
 	if(depth == depthMax) {
 		return;
 	}
@@ -497,78 +643,59 @@ bool saveAnim(const ofbx::IScene *scene)
 		}
 	};
 	
-	// Find the root limb (hips)
-	const ofbx::Object *root = nullptr; // root limb
-	int i = 0;
-	while(const ofbx::Object* child = scene->getRoot()->resolveObjectLink(i)) {
-		if(child->getType() == ofbx::Object::Type::LIMB_NODE) {
-			root = child;
-			break;
-		}
-		++i;
-	}
-	
-	// Traverse hierarchy
-	vector<const ofbx::Object*> limbVec;
-	map<const ofbx::Object*, int> limbMap;
-	vector<int> limbParents;
-	traverseLimbs(root, limbVec, limbMap, limbParents);
-	assert(limbVec.size() == limbParents.size());
-	
-	// Find the mesh with the maximum number of clusters
-	int cluster_count = 0;
-	const ofbx::Skin *skin = nullptr;
-	for(int i = 0; i < mesh_count; ++i) {
-		const ofbx::Mesh *mesh = scene->getMesh(i);
-		const ofbx::Geometry *geom = mesh->getGeometry();
-		if(geom->getSkin()->getClusterCount() > cluster_count) {
-			skin = geom->getSkin();
-			cluster_count = skin->getClusterCount();
-			break;
-		}
-	}
-	assert(skin != nullptr);
-	cout << cluster_count << " clusters" << endl;
-	
+
 	// Store rest pose
-	int key_count_max = -1;
 	vector<mat4> pose0;
-	pose0.reserve(cluster_count);
-	for(int j = 0; j < cluster_count; ++j) {
-		const ofbx::Cluster *cluster = skin->getCluster(j);
-		//cout << "cluster " << j << ", " << cluster->name << endl;
+	pose0.reserve(clusters.size());
+
+	for (auto cluster : clusters) {
 		const ofbx::Matrix m = cluster->getTransformLinkMatrix();
 		// Need to cast from double to float
 		// Assume both are column major
 		pose0.push_back(toMat4(m.m));
 		// Get key_count, used later
-		const ofbx::Object *limb = cluster->getLink();
-		if(limb->getType() == ofbx::Object::Type::LIMB_NODE) {
-			if(root == nullptr) {
+		// Some limb node may contain more frames, key count is obtained by root node in function resolve_limb_node
+		/*
+		if (cluster_index_map.find(cluster->id) == cluster_index_map.end()) {
+			continue;
+		}
+		const ofbx::Object* limb = cluster->getLink();
+		if (limb->getType() == ofbx::Object::Type::LIMB_NODE) {
+			if (root == nullptr) {
 				root = limb;
 			}
 			// limb has one or two children that are curve nodes.
 			int i = 0;
-			while(const ofbx::Object* child = limb->resolveObjectLink(i)) {
-				if(child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
+			while (const ofbx::Object* child = limb->resolveObjectLink(i)) {
+				if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
 					const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
 					const ofbx::AnimationCurve* curveX = node->getCurve(0);
-					if(curveX->getKeyCount() > key_count_max) {
+					if (curveX == nullptr) {
+						cout << "No curveX:" << child->name << endl;
+						++i;
+						continue;
+					}
+					if (curveX->getKeyCount() > key_count_max) {
 						key_count_max = curveX->getKeyCount();
 					}
 				}
 				++i;
 			}
 		}
+		*/
 	}
+
+
+	
+
 	assert(key_count_max != -1);
 	
 	// Store the local transform values
-	vector< vector<mat4> > Ts(cluster_count);
-	vector< vector<mat4> > Rs(cluster_count);
-	for(int j = 0; j < cluster_count; ++j) {
-		const ofbx::Cluster *cluster = skin->getCluster(j);
-		const ofbx::Object *limb = cluster->getLink();
+	vector< vector<mat4> > Ts(limbVec.size());
+	vector< vector<mat4> > Rs(limbVec.size());
+	for(int j = 0; j < limbVec.size(); ++j) {
+		//const ofbx::Cluster *cluster = clusters[j];
+		const ofbx::Object *limb = limbVec[j];
 		// limb has one or more children that are curve nodes.
 		vector<ofbx::Vec3> rotations;
 		vector<ofbx::Vec3> positions;
@@ -580,17 +707,36 @@ bool saveAnim(const ofbx::IScene *scene)
 				const ofbx::AnimationCurve* curveX = node->getCurve(0);
 				const ofbx::AnimationCurve* curveY = node->getCurve(1);
 				const ofbx::AnimationCurve* curveZ = node->getCurve(2);
+				if (curveX == nullptr) {
+					++i;
+					continue;
+				}
 				key_count = curveX->getKeyCount();
 				assert(key_count == curveY->getKeyCount());
 				assert(key_count == curveZ->getKeyCount());
 				const float *xvals = curveX->getKeyValue();
 				const float *yvals = curveY->getKeyValue();
 				const float *zvals = curveZ->getKeyValue();
-				for(int k = 0; k < key_count; ++k) {
+
+				const long long* key_time = curveX->getKeyTime();
+
+				// Use key time to align frames for each node
+				int index = 0;
+				for(int k = 0; k < key_count_max; k++) {
+					double step = 1.0 / (key_count_max - 1);
+					double delta = 1e-6;
+					if (key_count > 1) {
+						while (index < key_count && key_time[index] * 1.0 / key_time[key_count - 1] <= step * k + delta) {
+							index++;
+						}
+					}
+					else { index = 1; }
+					
 					ofbx::Vec3 v;
-					v.x = xvals[k];
-					v.y = yvals[k];
-					v.z = zvals[k];
+					v.x = xvals[index - 1];
+					v.y = yvals[index - 1];
+					v.z = zvals[index - 1];
+
 					if(strcmp(child->name, "R") == 0) {
 						rotations.push_back(v);
 					} else if(strcmp(child->name, "T") == 0) {
@@ -603,8 +749,8 @@ bool saveAnim(const ofbx::IScene *scene)
 			}
 			++i;
 		}
-		//cout << limb->name << ": " << key_count << " frames" << endl;
-		for(int k = 0; k < key_count; ++k) {
+
+		for(int k = 0; k < key_count_max; ++k) {
 			// http://docs.autodesk.com/FBX/2014/ENU/FBX-SDK-Documentation/cpp_ref/class_fbx_cluster.html
 			if(k < positions.size()) {
 				Ts[j].push_back(toT(positions[k]));
@@ -618,13 +764,15 @@ bool saveAnim(const ofbx::IScene *scene)
 	// These poses are in local coordinates, so transform them to world
 	// https://help.autodesk.com/view/FBX/2017/ENU/?guid=__files_GUID_10CDD63C_79C1_4F2D_BB28_AD2BE65A02ED_htm
 	// WorldTransform = ParentWorldTransform * T * Roff * Rp * Rpre * R * Rpost^-1 * Rp^-1 * Soff * Sp * S * Sp^-1
-	vector< vector<mat4> > Es(cluster_count);
+	vector< vector<mat4> > Es(limbVec.size());
+
+	
 	for(int k = 0; k < key_count_max; ++k) {
-		for(int j = 0; j < cluster_count; ++j) {
-			const ofbx::Object *limb = limbVec[j];
+		for(int j = 0; j < limbVec.size(); ++j) {
+			const ofbx::Object* limb = limbVec[j];
 			int p = limbParents[j];
 			mat4 P = mat4(1.0);
-			if(p != -1) {
+			if (p != -1) {
 				P = Es[p][k];
 			}
 			ofbx::RotationOrder ro = limb->getRotationOrder();
@@ -673,6 +821,7 @@ bool saveAnim(const ofbx::IScene *scene)
 		}
 	}
 	
+
 	// Write to skeleton file
 	string path = FILENAME + "_skel.txt";
 	FILE* fp = fopen(path.c_str(), "wb");
@@ -684,17 +833,20 @@ bool saveAnim(const ofbx::IScene *scene)
 	fprintf(fp, "# 1st line: frameCount boneCount\n");
 	fprintf(fp, "# Each subsequent line is a frame with \"boneCount\" sets of\n");
 	fprintf(fp, "# quaternions (x,y,z,w) and positions (x,y,z).\n");
-	fprintf(fp, "%d %d\n", key_count_max, cluster_count);
+	fprintf(fp, "%d %d\n", key_count_max, clusters.size());
 	
-	for(const auto &M : pose0) {
+	
+	for (int j = 0; j < clusters.size(); ++j) {
+		const auto& M = pose0[j];
 		quat q = quat_cast(M);
 		vec3 p(M[3]);
 		fprintf(fp, "%f %f %f %f %f %f %f ", q.x, q.y, q.z, q.w, p.x, p.y, p.z);
 	}
 	fprintf(fp, "\n");
+	
 	for(int k = 0; k < key_count_max; ++k) {
-		for(int j = 0; j < cluster_count; ++j) {
-			const mat4 &E = Es[j][k];
+		for(int j = 0; j < clusters.size(); ++j) {
+			const mat4 &E = Es[clusters_index[j]][k];
 			quat q = quat_cast(E);
 			vec3 p(E[3]);
 			fprintf(fp, "%f %f %f %f %f %f %f ", q.x, q.y, q.z, q.w, p.x, p.y, p.z);
@@ -706,18 +858,146 @@ bool saveAnim(const ofbx::IScene *scene)
 	return true;
 }
 
+bool saveInputfile() {
+	char sep = '/';
+	size_t i = FILENAME.rfind(sep, FILENAME.length());
+	string path = FILENAME.substr(0, i + 1) + "input.txt";
+	FILE* fp = fopen(path.c_str(), "wb");
+	if (!fp) {
+		cout << "Could not write to " << path << endl;
+		return false;
+	}
+	cout << "Saving to " << path << endl;
+
+	string file_name;
+	if (i != string::npos) {
+		file_name = FILENAME.substr(i + 1, FILENAME.length() - i);
+	}
+
+	fprintf(fp, "# Each line starts with a keyword:\n");
+	fprintf(fp, "# - TEXTURE <texture file>\n");
+	fprintf(fp, "# - MESH <obj file> <skin file> <texture file>\n");
+	fprintf(fp, "# - SKELETON <skeleton file>\n");
+	fprintf(fp, "# Alpha blending is used to render the mouth, eyes, and brows. Since the brows mesh covers the eyes mesh,\n");
+	fprintf(fp, "# the brows mesh should be rendered after the eyes mesh.\n");
+	fprintf(fp, "TEXTURE ");
+	fprintf(fp, TEXTURENAME.c_str());
+	fprintf(fp, "\n");
+	fprintf(fp, "SKELETON ");
+	fprintf(fp, file_name.c_str());
+	fprintf(fp, "_skel.txt\n");
+	
+	
+	for (const auto& mesh : myMeshes) {
+		string path = file_name + "_" + mesh.name;
+		string input_line = "MESH " + path + ".obj " + path + "_skin.txt " + TEXTURENAME + " \n";
+		fprintf(fp, input_line.c_str());
+
+	}
+	
+	fclose(fp);
+
+	return true;
+
+}
+
+bool saveTexture(const ofbx::IScene* scene)
+{
+	cout << "=== Texture ===" << endl;
+
+	const ofbx::IElement* root = scene->getRootElement();
+	const ofbx::IElement* child = root->getFirstChild();
+	vector<const ofbx::IElement*> videos = find_element(root, "Video");
+
+	// The texture files are stored in fbx as Video element
+	for (auto video : videos) {
+		vector<const ofbx::IElement*> contents = find_element(video, "Content");
+		vector<const ofbx::IElement*> filenames = find_element(video, "Filename");
+		if (contents.size() != 0 && contents[0]->getFirstProperty() != nullptr) {
+			ofbx::DataView values = contents[0]->getFirstProperty()->getValue();
+			ofbx::DataView texture_name = filenames[0]->getFirstProperty()->getValue();
+			string name;
+			for (long i=0 ; i < texture_name.end - texture_name.begin; i++) {
+				name += static_cast<char>(*(texture_name.begin + i));
+			}
+			string path = FILENAME + "_texture.png";
+			size_t l = name.rfind('/', name.length());
+			if (l != string::npos) {
+				path = FILENAME + "_" + name.substr(l + 1, name.length() - l);
+				cout << "Extracting texture: " << name.substr(l + 1, name.length() - l) << endl;
+				if (TEXTURENAME.length() == 0) {
+					size_t s = path.rfind('/', path.length());
+					TEXTURENAME = path.substr(s + 1, path.length() - s);
+				}
+			}
+			FILE* fp = fopen(path.c_str(), "wb");
+			if (!fp) {
+				cout << "Could not write to " << path << endl;
+				return false;
+			}
+
+			long data_length = values.end - values.begin;
+			/*
+			cout << int((values.begin)[0]) << endl;
+			cout << int((values.begin)[1]) << endl;
+			cout << int((values.begin)[2]) << endl;
+			cout << int((values.begin)[3]) << endl;
+			*/
+
+			fwrite(values.begin + 4, sizeof(unsigned char), data_length, fp);
+			fclose(fp);
+		}
+	}
+
+
+	return true;
+}
+
 // https://www.oreilly.com/library/view/c-cookbook/0596007612/ch10s15.html
 string getFileName(const string& s)
 {
 	char sep = '/';
+	
 #ifdef _WIN32
 	sep = '\\';
 #endif
+
 	size_t i = s.rfind(sep, s.length());
 	if(i != string::npos) {
-		return(s.substr(i+1, s.length() - i));
+		return(s.substr(i + 1, s.length() - i));
 	}
 	return("");
+}
+
+void resolve_limb_nodes(const ofbx::IScene* scene) {
+	// Find the root limb (hips)
+	const ofbx::Object* root = nullptr; // root limb
+	int i = 0;
+	while (const ofbx::Object* child = scene->getRoot()->resolveObjectLink(i)) {
+		if (child->getType() == ofbx::Object::Type::LIMB_NODE) {
+			root = child;
+			break;
+		}
+		++i;
+	}
+
+	// Ger ket count
+	for (int i = 0; const ofbx::Object * child = root->resolveObjectLink(i); i++) {
+		if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
+			const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
+			const ofbx::AnimationCurve* curveX = node->getCurve(0);
+			if (curveX == nullptr) {
+				++i;
+				continue;
+			}
+			key_count_max = curveX->getKeyCount();
+
+		}
+	}
+
+	// Traverse hierarchy
+	traverseLimbs(root, limbVec, limbMap, limbParents);
+	assert(limbVec.size() == limbParents.size() && limbVec.size() == limbMap.size());
 }
 
 int main(int argc, char **argv)
@@ -752,16 +1032,21 @@ int main(int argc, char **argv)
 	}
 	
 	// Extract just the filename
-	FILENAME = getFileName(filename);
+	//FILENAME = getFileName(filename);
+	FILENAME = filename;
 	FILENAME = FILENAME.substr(0, FILENAME.length() - 4);
 	
 	// DEBUG: Traverse tree
 	//traverseAll(scene->getRoot(), 0);
+
+	resolve_limb_nodes(scene);
 	
 	// Parse and save
 	saveGeom(scene);
 	saveSkin(scene);
 	saveAnim(scene);
+	saveTexture(scene);
+	saveInputfile();
 	
 	// Delete data
 	delete [] content;
