@@ -105,6 +105,7 @@ public:
 vector<MyMesh> myMeshes;
 
 vector<const ofbx::IElement*> find_element(const ofbx::IElement* parent_element, const string& id) {
+	// Find a child element of specific id from the given parent element 
 	vector<const ofbx::IElement*> elements;
 	char string_id[32];
 	const ofbx::IElement* child = parent_element->getFirstChild();
@@ -126,7 +127,7 @@ vector<const ofbx::IElement*> find_element(const ofbx::IElement* parent_element,
 }
 
 const ofbx::IElement* find_child(const ofbx::IElement& element, const char* id)
-{
+{	// Helper function for find property of an element
 	const ofbx::IElement* iter = element.getFirstChild();
 	while (iter != nullptr)
 	{
@@ -138,6 +139,7 @@ const ofbx::IElement* find_child(const ofbx::IElement& element, const char* id)
 
 ofbx::IElement* find_property(const ofbx::IElement& obj, const char* name)
 {
+	// Find a specific property of a given element
 	const ofbx::IElement* props = find_child(obj, "Properties70");
 	if (!props) return nullptr;
 
@@ -154,6 +156,7 @@ ofbx::IElement* find_property(const ofbx::IElement& obj, const char* name)
 }
 
 glm::vec3 get_vector(const ofbx::IElement* property) {
+	// Get the vaule of sepcific property
 	const ofbx::IElementProperty* iter = property->getFirstProperty();
 	while (iter != nullptr && iter->getType() != ofbx::IElementProperty::Type::DOUBLE) {
 		iter = iter->getNext();
@@ -170,6 +173,10 @@ glm::vec3 get_vector(const ofbx::IElement* property) {
 }
 
 glm::mat4 get_T_matrix(const ofbx::IScene* scene, const char* mesh_name) {
+	// Get the transform matrix for meshes from original pose to binding pose
+	// Usually it is an identity matrix, but for some fbx files it is necessary to apply
+	// this transforms to get correct results.
+
 	glm::mat4 transform_matrix = glm::mat4(1.0);
 	const ofbx::IElement* root = scene->getRootElement();
 	const ofbx::IElement* child = root->getFirstChild();
@@ -418,7 +425,7 @@ bool saveSkin(const ofbx::IScene *scene)
 					// Error may exist in float comparison. Assume that all weights are correct
 					//assert(0.0 <= weight && weight <= 1.0);
 					verts[index].w.push_back(weight);
-					verts[index].i.push_back(clusters.size() - 1);
+					verts[index].i.push_back(clusters_index.back());
 					if(verts[index].i.size() > myMeshes[i].maxInfluences) {
 						myMeshes[i].maxInfluences = (int)verts[index].i.size();
 					}
@@ -443,7 +450,7 @@ bool saveSkin(const ofbx::IScene *scene)
 		fprintf(fp, "# Each subsequent line corresponds to a vertex.\n");
 		fprintf(fp, "# In each line, the first number is the number of bone influences for the vertex.\n");
 		fprintf(fp, "# The next numbers are \"influence\" pairs of {bone index, bone weight}.\n");
-		fprintf(fp, "%d %d %d\n", vertex_count, clusters_index.size(), mesh.maxInfluences);
+		fprintf(fp, "%d %d %d\n", vertex_count, limbVec.size(), mesh.maxInfluences);
 		for(int i : vertsUnique) {
 			const MyVertex &v = verts[i];
 			int influences = v.w.size();
@@ -552,8 +559,6 @@ bool saveAnim(const ofbx::IScene *scene)
 	//
 	// TransformLink is the global transform of the bone(link) at the binding moment
 	
-	// Assume that each mesh skin has the same number of clusters (bones) as all the
-	// other mesh skins.
 	int mesh_count = scene->getMeshCount();
 	if(mesh_count == 0) {
 		cout << "This file has no mesh" << endl;
@@ -646,46 +651,28 @@ bool saveAnim(const ofbx::IScene *scene)
 
 	// Store rest pose
 	vector<mat4> pose0;
-	pose0.reserve(clusters.size());
 
-	for (auto cluster : clusters) {
-		const ofbx::Matrix m = cluster->getTransformLinkMatrix();
-		// Need to cast from double to float
-		// Assume both are column major
-		pose0.push_back(toMat4(m.m));
-		// Get key_count, used later
-		// Some limb node may contain more frames, key count is obtained by root node in function resolve_limb_node
-		/*
-		if (cluster_index_map.find(cluster->id) == cluster_index_map.end()) {
-			continue;
+	for (int j = 0; j < limbVec.size(); ++j) {
+		const ofbx::Object* limb = limbVec[j];
+		int p = limbParents[j];
+		mat4 P = mat4(1.0);
+		if (p != -1) {
+			P = pose0[p];
 		}
-		const ofbx::Object* limb = cluster->getLink();
-		if (limb->getType() == ofbx::Object::Type::LIMB_NODE) {
-			if (root == nullptr) {
-				root = limb;
-			}
-			// limb has one or two children that are curve nodes.
-			int i = 0;
-			while (const ofbx::Object* child = limb->resolveObjectLink(i)) {
-				if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
-					const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
-					const ofbx::AnimationCurve* curveX = node->getCurve(0);
-					if (curveX == nullptr) {
-						cout << "No curveX:" << child->name << endl;
-						++i;
-						continue;
-					}
-					if (curveX->getKeyCount() > key_count_max) {
-						key_count_max = curveX->getKeyCount();
-					}
-				}
-				++i;
-			}
-		}
-		*/
+		ofbx::RotationOrder ro = limb->getRotationOrder();
+		mat4 R = toR(limb->getLocalRotation(), ro);
+		mat4 T = toT(limb->getLocalTranslation());
+		mat4 Roff = toR(limb->getRotationOffset(), ro);
+		mat4 Rp = toR(limb->getRotationPivot(), ro);
+		mat4 Rpre = toR(limb->getPreRotation(), ro);
+		mat4 Rpost = toR(limb->getPostRotation(), ro);
+		mat4 Soff = toS(limb->getScalingOffset());
+		mat4 Sp = toS(limb->getScalingPivot());
+		mat4 S = toS(limb->getLocalScaling());
+
+		mat4 E = P * T * Roff * Rp * Rpre * R * inverse(Rpost) * inverse(Rp) * Soff * Sp * S * inverse(Sp);
+		pose0.push_back(E);
 	}
-
-
 	
 
 	assert(key_count_max != -1);
@@ -766,7 +753,6 @@ bool saveAnim(const ofbx::IScene *scene)
 	// WorldTransform = ParentWorldTransform * T * Roff * Rp * Rpre * R * Rpost^-1 * Rp^-1 * Soff * Sp * S * Sp^-1
 	vector< vector<mat4> > Es(limbVec.size());
 
-	
 	for(int k = 0; k < key_count_max; ++k) {
 		for(int j = 0; j < limbVec.size(); ++j) {
 			const ofbx::Object* limb = limbVec[j];
@@ -818,10 +804,16 @@ bool saveAnim(const ofbx::IScene *scene)
 			//printMat4(S, "S");
 			mat4 E = P * T * Roff * Rp * Rpre * R * inverse(Rpost) * inverse(Rp) * Soff * Sp * S * inverse(Sp);
 			Es[j].push_back(E);
+			/*
+			if (k == 0 && j == 0) {
+				cout << "E: " << glm::to_string(Es[0][0]) << endl;
+				cout << "R: " << glm::to_string(R) << endl;
+				cout << "T: " << glm::to_string(T) << endl;
+			}
+			*/
 		}
 	}
 	
-
 	// Write to skeleton file
 	string path = FILENAME + "_skel.txt";
 	FILE* fp = fopen(path.c_str(), "wb");
@@ -833,10 +825,10 @@ bool saveAnim(const ofbx::IScene *scene)
 	fprintf(fp, "# 1st line: frameCount boneCount\n");
 	fprintf(fp, "# Each subsequent line is a frame with \"boneCount\" sets of\n");
 	fprintf(fp, "# quaternions (x,y,z,w) and positions (x,y,z).\n");
-	fprintf(fp, "%d %d\n", key_count_max, clusters.size());
+	fprintf(fp, "%d %d\n", key_count_max, limbVec.size());
 	
 	
-	for (int j = 0; j < clusters.size(); ++j) {
+	for (int j = 0; j < limbVec.size(); ++j) {
 		const auto& M = pose0[j];
 		quat q = quat_cast(M);
 		vec3 p(M[3]);
@@ -845,8 +837,8 @@ bool saveAnim(const ofbx::IScene *scene)
 	fprintf(fp, "\n");
 	
 	for(int k = 0; k < key_count_max; ++k) {
-		for(int j = 0; j < clusters.size(); ++j) {
-			const mat4 &E = Es[clusters_index[j]][k];
+		for(int j = 0; j < limbVec.size(); ++j) {
+			const mat4 &E = Es[j][k];
 			quat q = quat_cast(E);
 			vec3 p(E[3]);
 			fprintf(fp, "%f %f %f %f %f %f %f ", q.x, q.y, q.z, q.w, p.x, p.y, p.z);
@@ -859,6 +851,7 @@ bool saveAnim(const ofbx::IScene *scene)
 }
 
 bool saveInputfile() {
+	// Automatically generate the input file for skinning program input
 	char sep = '/';
 	size_t i = FILENAME.rfind(sep, FILENAME.length());
 	string path = FILENAME.substr(0, i + 1) + "input.txt";
@@ -880,13 +873,13 @@ bool saveInputfile() {
 	fprintf(fp, "# - SKELETON <skeleton file>\n");
 	fprintf(fp, "# Alpha blending is used to render the mouth, eyes, and brows. Since the brows mesh covers the eyes mesh,\n");
 	fprintf(fp, "# the brows mesh should be rendered after the eyes mesh.\n");
+	fprintf(fp, "# Lines for textures in automatic generated input file could be wrong when there are multilple textures, please modify them manually.\n");
 	fprintf(fp, "TEXTURE ");
 	fprintf(fp, TEXTURENAME.c_str());
 	fprintf(fp, "\n");
 	fprintf(fp, "SKELETON ");
 	fprintf(fp, file_name.c_str());
 	fprintf(fp, "_skel.txt\n");
-	
 	
 	for (const auto& mesh : myMeshes) {
 		string path = file_name + "_" + mesh.name;
@@ -953,6 +946,295 @@ bool saveTexture(const ofbx::IScene* scene)
 	return true;
 }
 
+bool saveLocalTransfomfile() {
+	// Get an Euler angle rotation matrix
+	auto toR = [](const ofbx::Vec3& v, ofbx::RotationOrder ro) {
+		mat4 I = mat4(1.0);
+		float x = v.x * M_PI / 180.0f;
+		float y = v.y * M_PI / 180.0f;
+		float z = v.z * M_PI / 180.0f;
+		mat4 Rx = rotate(I, x, vec3(1.0, 0.0, 0.0));
+		mat4 Ry = rotate(I, y, vec3(0.0, 1.0, 0.0));
+		mat4 Rz = rotate(I, z, vec3(0.0, 0.0, 1.0));
+		mat4 R = I;
+		switch (ro) {
+		case ofbx::RotationOrder::EULER_XYZ:
+			R = Rz * Ry * Rx;
+			break;
+		case ofbx::RotationOrder::EULER_XZY:
+			R = Ry * Rz * Rx;
+			break;
+		case ofbx::RotationOrder::EULER_YZX:
+			R = Rx * Rz * Ry;
+			break;
+		case ofbx::RotationOrder::EULER_YXZ:
+			R = Rz * Rx * Ry;
+			break;
+		case ofbx::RotationOrder::EULER_ZXY:
+			R = Ry * Rx * Rz;
+			break;
+		case ofbx::RotationOrder::EULER_ZYX:
+			R = Rx * Ry * Rz;
+			break;
+		case ofbx::RotationOrder::SPHERIC_XYZ:
+			assert(false);
+			break;
+		}
+		return R;
+	};
+
+	// Get a translation matrix
+	auto toT = [](const ofbx::Vec3& v) {
+		mat4 I = mat4(1.0);
+		mat4 T = translate(I, vec3(v.x, v.y, v.z));
+		return T;
+	};
+
+	// Get a scale matrix
+	auto toS = [](const ofbx::Vec3& v) {
+		mat4 I = mat4(1.0);
+		if (v.x == 0 && v.y == 0 && v.z == 0) {
+			// Assuming that 0 scale was sent in by mistake
+			return I;
+		}
+		else {
+			mat4 S = scale(I, vec3(v.x, v.y, v.z));
+			return S;
+		}
+	};
+
+	// Write to local static transforms files
+	string path = FILENAME + "_static_transforms.txt";
+	FILE* fp = fopen(path.c_str(), "wb");
+	if (!fp) {
+		cout << "Could not write to " << path << endl;
+		return false;
+	}
+	cout << "Saving to " << path << endl;
+	fprintf(fp, "# https://help.autodesk.com/view/FBX/2017/ENU/?guid=__files_GUID_10CDD63C_79C1_4F2D_BB28_AD2BE65A02ED_htm \n");
+	fprintf(fp, "# WorldTransform = ParentWorldTransform * T * Roff * Rp * Rpre * R * Rpost^-1 * Rp^-1 * Soff * Sp * S * Sp^-1\n");
+	fprintf(fp, "# Of these transforms, the only time - varying ones are : T for the root jointand R for all the joints.\n");
+	fprintf(fp, "# This file contains the static transforms, listed in left - to - right order, one joint per line :\n");
+	fprintf(fp, "# Each line contains 8 matrices: T Roff Rp Rpre Rpost Soff Sp S\n");
+	fprintf(fp, "# Each matrix is 7 numbers: 4 for quaternion(x, y, z, w) and 3 for position(x, y, z), so that each line has 7 * 8 = 56 numbers.\n");
+	fprintf(fp, "# Even though the root joint's T is time-varying, we list it here as an identity matrix to simplify parsing.\n");
+	fprintf(fp, "# So, the total number of lines is the same as boneCount, which is specified by the first number in the file.\n");
+	fprintf(fp, "%d\n",limbVec.size());
+
+	path = FILENAME + "_skel_local.txt";
+	FILE* fp2 = fopen(path.c_str(), "wb");
+	if (!fp2) {
+		cout << "Could not write to " << path << endl;
+		return false;
+	}
+	cout << "Saving to " << path << endl;
+	fprintf(fp2, "# 1st line : frameCount boneCount\n");
+	fprintf(fp2, "# Each subsequent line is a frame with \"boneCount\" sets of Euler angles.\n");
+	fprintf(fp2, "# The root joint contains Euler angles and positions, while all other joints contain just Euler angles.\n");
+	fprintf(fp2, "# So, each line has 3 + 3 * boneCount numbers.\n");
+	fprintf(fp2, "%d %d\n", key_count_max, limbVec.size());
+
+	// Store the local transform values
+	vector< vector<float> > Ts(limbVec.size());
+	vector< vector<float> > Rs(limbVec.size());
+	for (int j = 0; j < limbVec.size(); ++j) {
+		const ofbx::Object* limb = limbVec[j];
+		// limb has one or more children that are curve nodes.
+		vector<float> rotations;
+		vector<float> positions;
+		int i = 0;
+		int key_count = 0; // key count for this limb
+		while (const ofbx::Object* child = limb->resolveObjectLink(i)) {
+			if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
+				const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
+				const ofbx::AnimationCurve* curveX = node->getCurve(0);
+				const ofbx::AnimationCurve* curveY = node->getCurve(1);
+				const ofbx::AnimationCurve* curveZ = node->getCurve(2);
+				if (curveX == nullptr) {
+					++i;
+					continue;
+				}
+				key_count = curveX->getKeyCount();
+				assert(key_count == curveY->getKeyCount());
+				assert(key_count == curveZ->getKeyCount());
+				const float* xvals = curveX->getKeyValue();
+				const float* yvals = curveY->getKeyValue();
+				const float* zvals = curveZ->getKeyValue();
+
+				const long long* key_time = curveX->getKeyTime();
+
+				// Use key time to align frames for each node
+				int index = 0;
+				for (int k = 0; k < key_count_max; k++) {
+					double step = 1.0 / (key_count_max - 1);
+					double delta = 1e-6;
+					if (key_count > 1) {
+						while (index < key_count && key_time[index] * 1.0 / key_time[key_count - 1] <= step * k + delta) {
+							index++;
+						}
+					}
+					else { index = 1; }
+
+					ofbx::Vec3 v;
+					v.x = xvals[index - 1];
+					v.y = yvals[index - 1];
+					v.z = zvals[index - 1];
+					if (strcmp(child->name, "R") == 0) {
+						rotations.push_back(v.x * M_PI / 180.0);
+						rotations.push_back(v.y * M_PI / 180.0);
+						rotations.push_back(v.z * M_PI / 180.0);
+					}
+					else if (strcmp(child->name, "T") == 0) {
+						positions.push_back(v.x);
+						positions.push_back(v.y);
+						positions.push_back(v.z);
+					}
+					else {
+						cout << "Unsupported animation curve type" << endl;
+						assert(false);
+					}
+				}
+			}
+			++i;
+		}
+		Ts[j].insert(Ts[j].end(), positions.begin(), positions.end());
+		Rs[j].insert(Rs[j].end(), rotations.begin(), rotations.end());
+	}
+
+	// Get local transforms
+	vector< vector<mat4> > Ls(limbVec.size());
+	for (int k = 0; k < key_count_max; ++k) {
+		for (int j = 0; j < limbVec.size(); ++j) {
+			const ofbx::Object* limb = limbVec[j];
+
+			// Mian difference from the world skeleton, P is always identity
+			mat4 P = mat4(1.0);
+			ofbx::RotationOrder ro = limb->getRotationOrder();
+			ofbx::Vec3 R = limb->getLocalRotation();
+			ofbx::Vec3 T = limb->getLocalTranslation();
+			if (Rs[j].empty()) {
+				// No key frames for this limb. Use rest pose.
+			}
+			else {
+				// Use this key frame.
+				R.x = Rs[j][k * 3];
+				R.y = Rs[j][k * 3 + 1];
+				R.z = Rs[j][k * 3 + 2];
+			}
+			if (Ts[j].empty()) {
+				// No key frames for this limb. Use rest pose.
+			}
+			else {
+				T.x = Ts[j][k * 3];
+				T.y = Ts[j][k * 3 + 1];
+				T.z = Ts[j][k * 3 + 2];
+			}
+			
+			if (k == 0) {
+				vector<mat4> transforms;
+				transforms.push_back(toT(T));
+				transforms.push_back(toR(limb->getRotationOffset(), ro));
+				transforms.push_back(toR(limb->getRotationPivot(), ro));
+				transforms.push_back(toR(limb->getPreRotation(), ro));
+				transforms.push_back(toR(limb->getPostRotation(), ro));
+				transforms.push_back(toS(limb->getScalingOffset()));
+				transforms.push_back(toS(limb->getScalingPivot()));
+				transforms.push_back(toS(limb->getLocalScaling()));
+				if (j == 0)
+				{
+					transforms[0] = mat4(1.0);
+				}
+				for (auto matrix : transforms) {
+					quat q = quat_cast(matrix);
+					vec3 p(matrix[3]);
+					fprintf(fp, "%f %f %f %f %f %f %f ", q.x, q.y, q.z, q.w, p.x, p.y, p.z);
+				}
+				fprintf(fp, "\n");
+			}
+				
+			if (j == 0) {
+				//quat q = quat_cast(toR(R, ofbx::RotationOrder::EULER_XYZ));
+				fprintf(fp2, "%f %f %f %f %f %f ", R.x, R.y, R.z, T.x, T.y, T.z);
+				//cout << glm::to_string(q) << endl;
+			}
+			else {
+				fprintf(fp2, "%f %f %f ", R.x, R.y, R.z);
+			}
+			
+		}
+		fprintf(fp2, "\n");
+	}
+	fclose(fp2);
+	fclose(fp);
+
+	// Write to hierarchy
+	path = FILENAME + "_hierarchy.txt";
+	fp = fopen(path.c_str(), "wb");
+	if (!fp) {
+		cout << "Could not write to " << path << endl;
+		return false;
+	}
+	cout << "Saving to " << path << endl;
+	fprintf(fp, "# The first line is the number of bones/joints.\n");
+	fprintf(fp, "# All other files are:\n");
+	fprintf(fp, "# <JOINT INDEX> <PARENT INDEX> <ROTATION ORDER> <JOINT NAME>\n");
+	fprintf(fp, "%d\n", limbVec.size());
+	for (int j = 0; j < limbVec.size(); ++j) {
+		int joint_index = j;
+		int parent_index = limbParents[joint_index];
+		fprintf(fp, "%d %d ", joint_index, parent_index);
+		switch (limbVec[0]->getRotationOrder()) {
+		case ofbx::RotationOrder::EULER_XYZ: fprintf(fp, "EULER_XYZ "); break;
+		case ofbx::RotationOrder::EULER_XZY: fprintf(fp, "EULER_XZY "); break;
+		case ofbx::RotationOrder::EULER_YXZ: fprintf(fp, "EULER_YXZ "); break;
+		case ofbx::RotationOrder::EULER_YZX: fprintf(fp, "EULER_YZX "); break;
+		case ofbx::RotationOrder::EULER_ZXY: fprintf(fp, "EULER_ZXY "); break;
+		case ofbx::RotationOrder::EULER_ZYX: fprintf(fp, "EULER_YZX "); break;
+		case ofbx::RotationOrder::SPHERIC_XYZ: fprintf(fp, "SPHERIC_XYZ "); break;
+		}
+		if (limbVec[j]->name) {
+			fprintf(fp, limbVec[j]->name);
+		}
+		else {
+			fprintf(fp, "noname");
+		}
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	// Wirte to the local transforms of binding pose 
+	path = FILENAME + "_binding_pose_local.txt";
+	fp = fopen(path.c_str(), "wb");
+	if (!fp) {
+		cout << "Could not write to " << path << endl;
+		return false;
+	}
+	cout << "Saving to " << path << endl;
+	fprintf(fp, "# 1st line : frameCount boneCount\n");
+	fprintf(fp, "# Next line is the \"boneCount\" sets of Euler angles for binding pose.\n");
+	fprintf(fp, "# The root joint contains Euler angles and positions, while all other joints contain just Euler angles.\n");
+	fprintf(fp, "# So, each line has 3 + 3 * boneCount numbers.\n");
+	fprintf(fp, "%d %d\n", key_count_max, limbVec.size());
+
+
+	for (int j = 0; j < limbVec.size(); ++j) {
+		const ofbx::Object* limb = limbVec[j];
+		ofbx::Vec3 R = limb->getLocalRotation();
+		ofbx::Vec3 T = limb->getLocalTranslation();
+		if (j == 0) {
+			//quat q = quat_cast(toR(R, ofbx::RotationOrder::EULER_XYZ));
+			fprintf(fp, "%f %f %f %f %f %f ", R.x, R.y, R.z, T.x, T.y, T.z);
+			//cout << glm::to_string(q) << endl;
+		}
+		else {
+			fprintf(fp, "%f %f %f ", R.x, R.y, R.z);
+		}
+	}
+	fclose(fp);
+
+	return true;
+}
+
 // https://www.oreilly.com/library/view/c-cookbook/0596007612/ch10s15.html
 string getFileName(const string& s)
 {
@@ -973,15 +1255,26 @@ void resolve_limb_nodes(const ofbx::IScene* scene) {
 	// Find the root limb (hips)
 	const ofbx::Object* root = nullptr; // root limb
 	int i = 0;
+	
 	while (const ofbx::Object* child = scene->getRoot()->resolveObjectLink(i)) {
+
+		// Used for extracting fbx file from blender
+		/*
+		if (child->name[0] == 'A') {
+			root = child->resolveObjectLink(0);
+			break;
+		}
+		*/
+
 		if (child->getType() == ofbx::Object::Type::LIMB_NODE) {
 			root = child;
 			break;
 		}
 		++i;
 	}
+	
 
-	// Ger ket count
+	// Ger ket count for root limb
 	for (int i = 0; const ofbx::Object * child = root->resolveObjectLink(i); i++) {
 		if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
 			const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
@@ -995,7 +1288,7 @@ void resolve_limb_nodes(const ofbx::IScene* scene) {
 		}
 	}
 
-	// Traverse hierarchy
+	// Traverse hierarchy and store the skeleton structure for later use
 	traverseLimbs(root, limbVec, limbMap, limbParents);
 	assert(limbVec.size() == limbParents.size() && limbVec.size() == limbMap.size());
 }
@@ -1033,6 +1326,8 @@ int main(int argc, char **argv)
 	
 	// Extract just the filename
 	//FILENAME = getFileName(filename);
+
+	// Store extracted file in the same folder
 	FILENAME = filename;
 	FILENAME = FILENAME.substr(0, FILENAME.length() - 4);
 	
@@ -1047,7 +1342,10 @@ int main(int argc, char **argv)
 	saveAnim(scene);
 	saveTexture(scene);
 	saveInputfile();
-	
+
+	// Save local transfroms for each joint
+	//saveLocalTransfomfile();
+
 	// Delete data
 	delete [] content;
 	
