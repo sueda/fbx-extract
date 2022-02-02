@@ -1344,7 +1344,7 @@ int main(int argc, char **argv)
 	saveInputfile();
 
 	// Save local transfroms for each joint
-	//saveLocalTransfomfile();
+	saveLocalTransfomfile();
 
 	// Delete data
 	delete [] content;
