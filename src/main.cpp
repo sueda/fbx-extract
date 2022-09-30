@@ -1,12 +1,13 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <iostream>
 #include <vector>
 #include <map>
 #include <stdio.h>
+#include <cstring>
 #include <string>
 #include <algorithm>
 #include <set>
-#define _USE_MATH_DEFINES
-#include <cmath>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -450,7 +451,7 @@ bool saveSkin(const ofbx::IScene *scene)
 		fprintf(fp, "# Each subsequent line corresponds to a vertex.\n");
 		fprintf(fp, "# In each line, the first number is the number of bone influences for the vertex.\n");
 		fprintf(fp, "# The next numbers are \"influence\" pairs of {bone index, bone weight}.\n");
-		fprintf(fp, "%d %d %d\n", vertex_count, limbVec.size(), mesh.maxInfluences);
+		fprintf(fp, "%d %d %d\n", vertex_count, (int)limbVec.size(), mesh.maxInfluences);
 		for(int i : vertsUnique) {
 			const MyVertex &v = verts[i];
 			int influences = v.w.size();
@@ -825,7 +826,7 @@ bool saveAnim(const ofbx::IScene *scene)
 	fprintf(fp, "# 1st line: frameCount boneCount\n");
 	fprintf(fp, "# Each subsequent line is a frame with \"boneCount\" sets of\n");
 	fprintf(fp, "# quaternions (x,y,z,w) and positions (x,y,z).\n");
-	fprintf(fp, "%d %d\n", key_count_max, limbVec.size());
+	fprintf(fp, "%d %d\n", key_count_max, (int)limbVec.size());
 	
 	
 	for (int j = 0; j < limbVec.size(); ++j) {
@@ -873,18 +874,18 @@ bool saveInputfile() {
 	fprintf(fp, "# - SKELETON <skeleton file>\n");
 	fprintf(fp, "# Alpha blending is used to render the mouth, eyes, and brows. Since the brows mesh covers the eyes mesh,\n");
 	fprintf(fp, "# the brows mesh should be rendered after the eyes mesh.\n");
-	fprintf(fp, "# Lines for textures in automatic generated input file could be wrong when there are multilple textures, please modify them manually.\n");
+	fprintf(fp, "# Lines for textures in automatically generated input file could be wrong when there are multiple textures, please modify them manually.\n");
 	fprintf(fp, "TEXTURE ");
-	fprintf(fp, TEXTURENAME.c_str());
+	fprintf(fp, "%s", TEXTURENAME.c_str());
 	fprintf(fp, "\n");
 	fprintf(fp, "SKELETON ");
-	fprintf(fp, file_name.c_str());
+	fprintf(fp, "%s", file_name.c_str());
 	fprintf(fp, "_skel.txt\n");
 	
 	for (const auto& mesh : myMeshes) {
 		string path = file_name + "_" + mesh.name;
 		string input_line = "MESH " + path + ".obj " + path + "_skin.txt " + TEXTURENAME + " \n";
-		fprintf(fp, input_line.c_str());
+		fprintf(fp, "%s", input_line.c_str());
 
 	}
 	
@@ -1019,7 +1020,7 @@ bool saveLocalTransfomfile() {
 	fprintf(fp, "# Each matrix is 7 numbers: 4 for quaternion(x, y, z, w) and 3 for position(x, y, z), so that each line has 7 * 8 = 56 numbers.\n");
 	fprintf(fp, "# Even though the root joint's T is time-varying, we list it here as an identity matrix to simplify parsing.\n");
 	fprintf(fp, "# So, the total number of lines is the same as boneCount, which is specified by the first number in the file.\n");
-	fprintf(fp, "%d\n",limbVec.size());
+	fprintf(fp, "%d\n",(int)limbVec.size());
 
 	path = FILENAME + "_skel_local.txt";
 	FILE* fp2 = fopen(path.c_str(), "wb");
@@ -1032,7 +1033,7 @@ bool saveLocalTransfomfile() {
 	fprintf(fp2, "# Each subsequent line is a frame with \"boneCount\" sets of Euler angles.\n");
 	fprintf(fp2, "# The root joint contains Euler angles and positions, while all other joints contain just Euler angles.\n");
 	fprintf(fp2, "# So, each line has 3 + 3 * boneCount numbers.\n");
-	fprintf(fp2, "%d %d\n", key_count_max, limbVec.size());
+	fprintf(fp2, "%d %d\n", key_count_max, (int)limbVec.size());
 
 	// Store the local transform values
 	vector< vector<float> > Ts(limbVec.size());
@@ -1178,7 +1179,7 @@ bool saveLocalTransfomfile() {
 	fprintf(fp, "# The first line is the number of bones/joints.\n");
 	fprintf(fp, "# All other files are:\n");
 	fprintf(fp, "# <JOINT INDEX> <PARENT INDEX> <ROTATION ORDER> <JOINT NAME>\n");
-	fprintf(fp, "%d\n", limbVec.size());
+	fprintf(fp, "%d\n", (int)limbVec.size());
 	for (int j = 0; j < limbVec.size(); ++j) {
 		int joint_index = j;
 		int parent_index = limbParents[joint_index];
@@ -1193,7 +1194,7 @@ bool saveLocalTransfomfile() {
 		case ofbx::RotationOrder::SPHERIC_XYZ: fprintf(fp, "SPHERIC_XYZ "); break;
 		}
 		if (limbVec[j]->name) {
-			fprintf(fp, limbVec[j]->name);
+			fprintf(fp, "%s", limbVec[j]->name);
 		}
 		else {
 			fprintf(fp, "noname");
@@ -1214,7 +1215,7 @@ bool saveLocalTransfomfile() {
 	fprintf(fp, "# Next line is the \"boneCount\" sets of Euler angles for binding pose.\n");
 	fprintf(fp, "# The root joint contains Euler angles and positions, while all other joints contain just Euler angles.\n");
 	fprintf(fp, "# So, each line has 3 + 3 * boneCount numbers.\n");
-	fprintf(fp, "%d %d\n", key_count_max, limbVec.size());
+	fprintf(fp, "%d %d\n", key_count_max, (int)limbVec.size());
 
 
 	for (int j = 0; j < limbVec.size(); ++j) {

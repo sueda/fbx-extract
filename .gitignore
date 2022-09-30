@@ -32,3 +32,5 @@
 *.app
 xcode
 build
+data
+test

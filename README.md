@@ -3,11 +3,11 @@
 This program parses an FBX file and writes six types of output files.
 
 1. An OBJ file of the mesh
-2. An ascii file with skinning information
-3. An ascii file with the skeletal animation information
+2. An ASCII file with skinning information
+3. An ASCII file with the skeletal animation information
 4. Texture files
-5. An ascii file with the input information
-6. Four ascii files with the local transforms for each joint in skeletal animation information
+5. An ASCII file with the input information
+6. Four ASCII files with the local transforms for each joint in skeletal animation information
 
 The input FBX file can be downloaded from [Mixamo](mixamo.com).
 
@@ -24,7 +24,7 @@ This project builds on top of the following projects:
 - [OpenFBX](https://github.com/nem0/OpenFBX) (included)
 - [miniz](https://github.com/richgel999/miniz) (included)
 
-To build the project, run `cmake` and `make`, and then run with the fbx file as an argument:
+To build the project, run `cmake` and `make`, and then run with the FBX file as an argument:
 
 ```
 > mkdir build
@@ -89,16 +89,16 @@ To build the project, run `cmake` and `make`, and then run with the fbx file as 
 ### Input file
 
 - The input information for this [Assignment](https://people.engr.tamu.edu/sueda/courses/CSCE489/2021F/assignments/A2/index.html). 
-- This file only list the name of first extracted texture. If it is not the ideal one, please edit it manually.
+- This file only lists the name of the first extracted texture. If it is not the ideal one, please edit it manually.
 
 
 ### Local transforms
 
-- There are four ascii files storing the local transforms information, so we can convert them back without loss.
+- There are four ASCII files storing the local transforms information, so we can convert them back without loss.
 - The world transform can be restored using: `WorldTransform = ParentWorldTransform * T * Roff * Rp * Rpre * R * Rpost^-1 * Rp^-1 * Soff * Sp * S * Sp^-1`, described [here](https://help.autodesk.com/view/FBX/2017/ENU/?guid=__files_GUID_10CDD63C_79C1_4F2D_BB28_AD2BE65A02ED_htm).
 - Comments start with '#'.
 
-1. `*_static_transforms.txt` contains the the static transforms between the joints.
+1. `*_static_transforms.txt` contains the static transforms between the joints.
   - The first line contains the number of joints.
   - Each line next contains 8 matrices: `T Roff Rp Rpre Rpost Soff Sp S`.
   - Each matrix has 7 numbers: 4 for quaternion `(x, y, z, w)` and 3 for position `(x, y, z)`, so that each line has `7 * 8 = 56` numbers.
@@ -114,7 +114,7 @@ To build the project, run `cmake` and `make`, and then run with the fbx file as 
   - The first line has two integers: `frameCount` and `boneCount`, which are the same as the skeletal animation file.
   - Each subsequent line is a frame with `boneCount` sets of Euler angles.
   - The rotation order of the Euler angles is stored in the next file.
-  - The root joint contains Euler angles and positions, while all other joints contain just Euler angles. There will be `3 + 3 * boneCount numbers` each line.
+  - The root joint contains Euler angles and positions, while all other joints contain just Euler angles. There will be `3 + 3 * boneCount numbers` on each line.
   
 ```
 27 83
@@ -125,7 +125,7 @@ To build the project, run `cmake` and `make`, and then run with the fbx file as 
 3. `*_hierarchy.txt` contains the parent-child hierarchy for each joint in each frame.
   - The first line contains the number of joints.
   - Each subsequent line is in the form of `<JOINT INDEX> <PARENT INDEX> <ROTATION ORDER> <JOINT NAME>`
-  - If a joint has `-1` as parent index, then it is the root joint.
+  - If a joint has `-1` as its parent index, then it is the root joint.
 
 ```
 83
@@ -133,7 +133,7 @@ To build the project, run `cmake` and `make`, and then run with the fbx file as 
 1 0 EULER_XYZ newVegas:Pelvis
 ```
 
-4. `_binding_pose_local.txt` contains the Euler angle of local transformation for each joint of binding pose.
+4. `_binding_pose_local.txt` contains the Euler angle of local transformation for each joint of the binding pose.
   - It has the same format as the `_skel_local.txt` file.
 
 ```
