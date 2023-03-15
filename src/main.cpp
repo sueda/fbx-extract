@@ -695,18 +695,45 @@ bool saveAnim(const ofbx::IScene *scene)
 				const ofbx::AnimationCurve* curveX = node->getCurve(0);
 				const ofbx::AnimationCurve* curveY = node->getCurve(1);
 				const ofbx::AnimationCurve* curveZ = node->getCurve(2);
-				if (curveX == nullptr) {
+
+				const long long* key_time;
+				if (curveX != nullptr) {
+					key_count = curveX->getKeyCount();
+					key_time = curveX->getKeyTime();
+				}
+				else if (curveY != nullptr) {
+					key_count = curveY->getKeyCount();
+					key_time = curveY->getKeyTime();
+				}
+				else if (curveZ != nullptr) {
+					key_count = curveZ->getKeyCount();
+					key_time = curveZ->getKeyTime();
+				}
+				else {
 					++i;
 					continue;
 				}
-				key_count = curveX->getKeyCount();
-				assert(key_count == curveY->getKeyCount());
-				assert(key_count == curveZ->getKeyCount());
-				const float *xvals = curveX->getKeyValue();
-				const float *yvals = curveY->getKeyValue();
-				const float *zvals = curveZ->getKeyValue();
 
-				const long long* key_time = curveX->getKeyTime();
+				std::vector<float> emptyKeyValue(key_count, 0);
+				const float* xvals = emptyKeyValue.data();
+				const float* yvals = emptyKeyValue.data();
+				const float* zvals = emptyKeyValue.data();
+
+				if (curveX != nullptr) 
+					xvals = curveX->getKeyValue();
+				//else 
+				//	xvals = emptyKeyValue.data();
+
+				if (curveY != nullptr)
+					yvals = curveY->getKeyValue();
+				//else 
+				//	yvals = emptyKeyValue.data();
+				
+				if (curveZ != nullptr)
+					zvals = curveZ->getKeyValue();
+				else
+					zvals = emptyKeyValue.data();
+				
 
 				// Use key time to align frames for each node
 				int index = 0;
@@ -714,7 +741,7 @@ bool saveAnim(const ofbx::IScene *scene)
 					double step = 1.0 / (key_count_max - 1);
 					double delta = 1e-6;
 					if (key_count > 1) {
-						while (index < key_count && key_time[index] * 1.0 / key_time[key_count - 1] <= step * k + delta) {
+						while (index < key_count && (key_time[index] - key_time[0]) * 1.0 / (key_time[key_count - 1] - key_time[0]) <= step * k + delta) {
 							index++;
 						}
 					}
@@ -1051,18 +1078,38 @@ bool saveLocalTransfomfile() {
 				const ofbx::AnimationCurve* curveX = node->getCurve(0);
 				const ofbx::AnimationCurve* curveY = node->getCurve(1);
 				const ofbx::AnimationCurve* curveZ = node->getCurve(2);
-				if (curveX == nullptr) {
+
+				const long long* key_time;
+				if (curveX != nullptr) {
+					key_count = curveX->getKeyCount();
+					key_time = curveX->getKeyTime();
+				}
+				else if (curveY != nullptr) {
+					key_count = curveY->getKeyCount();
+					key_time = curveY->getKeyTime();
+				}
+				else if (curveZ != nullptr) {
+					key_count = curveZ->getKeyCount();
+					key_time = curveZ->getKeyTime();
+				}
+				else {
 					++i;
 					continue;
 				}
-				key_count = curveX->getKeyCount();
-				assert(key_count == curveY->getKeyCount());
-				assert(key_count == curveZ->getKeyCount());
-				const float* xvals = curveX->getKeyValue();
-				const float* yvals = curveY->getKeyValue();
-				const float* zvals = curveZ->getKeyValue();
 
-				const long long* key_time = curveX->getKeyTime();
+				std::vector<float> emptyKeyValue(key_count, 0);
+				const float* xvals = emptyKeyValue.data();
+				const float* yvals = emptyKeyValue.data();
+				const float* zvals = emptyKeyValue.data();
+
+				if (curveX != nullptr)
+					xvals = curveX->getKeyValue();
+
+				if (curveY != nullptr)
+					yvals = curveY->getKeyValue();
+
+				if (curveZ != nullptr)
+					zvals = curveZ->getKeyValue();
 
 				// Use key time to align frames for each node
 				int index = 0;
@@ -1070,7 +1117,7 @@ bool saveLocalTransfomfile() {
 					double step = 1.0 / (key_count_max - 1);
 					double delta = 1e-6;
 					if (key_count > 1) {
-						while (index < key_count && key_time[index] * 1.0 / key_time[key_count - 1] <= step * k + delta) {
+						while (index < key_count && (key_time[index] - key_time[0]) * 1.0 / (key_time[key_count - 1] - key_time[0]) <= step * k + delta) {
 							index++;
 						}
 					}
@@ -1275,7 +1322,7 @@ void resolve_limb_nodes(const ofbx::IScene* scene) {
 	}
 	
 
-	// Ger ket count for root limb
+	// Get key count for root limb
 	for (int i = 0; const ofbx::Object * child = root->resolveObjectLink(i); i++) {
 		if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
 			const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
