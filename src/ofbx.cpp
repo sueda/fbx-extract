@@ -2793,6 +2793,8 @@ static bool parseObjects(const Element& root, Scene* scene, u64 flags)
 					node->bone_link_property = con.property;
 				}
 				break;
+			default:
+				break;
 		}
 
 		switch (parent->getType())
@@ -2810,7 +2812,10 @@ static bool parseObjects(const Element& root, Scene* scene, u64 flags)
 						}
 						mesh->geometry = (Geometry*)child;
 						break;
-					case Object::Type::MATERIAL: mesh->materials.push_back((Material*)child); break;
+					case Object::Type::MATERIAL: mesh->materials.push_back((Material*)child);
+						break;
+					default:
+						break;
 				}
 				break;
 			}
@@ -2907,6 +2912,8 @@ static bool parseObjects(const Element& root, Scene* scene, u64 flags)
 				}
 				break;
 			}
+			default:
+				break;
 		}
 	}
 
@@ -2927,6 +2934,8 @@ static bool parseObjects(const Element& root, Scene* scene, u64 flags)
 						Error::s_message = "Failed to postprocess pose";
 						return false;
 					}
+					break;
+				default:
 					break;
 			}
 		}

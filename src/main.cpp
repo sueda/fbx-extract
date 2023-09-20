@@ -329,7 +329,7 @@ bool saveGeom(const ofbx::IScene *scene)
 			}
 			if(duplj == -1) {
 				// No duplicate was found, so create a new entry
-				vertsUniqueMap[i] = vertsUnique.size();
+				vertsUniqueMap[i] = (int)vertsUnique.size();
 				vertsUnique.push_back(i);
 			} else {
 				// Duplicate found
@@ -445,7 +445,7 @@ bool saveSkin(const ofbx::IScene *scene)
 		}
 		const auto &verts = mesh.verts;
 		const auto &vertsUnique = mesh.vertsUnique;
-		int vertex_count = vertsUnique.size();
+		int vertex_count = (int)vertsUnique.size();
 		cout << "Saving to " << path << endl;
 		fprintf(fp, "# 1st line: vertCount boneCount maxInfluences\n");
 		fprintf(fp, "# Each subsequent line corresponds to a vertex.\n");
@@ -454,7 +454,7 @@ bool saveSkin(const ofbx::IScene *scene)
 		fprintf(fp, "%d %d %d\n", vertex_count, (int)limbVec.size(), mesh.maxInfluences);
 		for(int i : vertsUnique) {
 			const MyVertex &v = verts[i];
-			int influences = v.w.size();
+			int influences = (int)v.w.size();
 			assert(influences == v.i.size());
 			fprintf(fp, "%d ", influences);
 			for(int j = 0; j < influences; ++j) {
@@ -519,7 +519,7 @@ void traverseLimbs(const ofbx::Object *limb, vector<const ofbx::Object*> &limbVe
 	}
 	
 	limbVec.push_back(limb);
-	limbMap[limb] = limbMap.size();
+	limbMap[limb] = (int)limbMap.size();
 	const ofbx::Object *parent = limb->getParent();
 	if(parent != nullptr && parent->getType() == ofbx::Object::Type::LIMB_NODE) {
 		limbParents.push_back(limbMap[parent]);
@@ -1367,7 +1367,7 @@ int main(int argc, char **argv)
 	
 	// Parse
 	cout << "Parsing " << filename << endl;
-	const ofbx::IScene* scene = ofbx::load((ofbx::u8*)content, file_size, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE);
+	const ofbx::IScene* scene = ofbx::load((ofbx::u8*)content, (int)file_size, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE);
 	if(!scene) {
 		cout << ofbx::getError() << endl;
 	}
