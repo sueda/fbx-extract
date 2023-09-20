@@ -518,6 +518,23 @@ void traverseLimbs(const ofbx::Object *limb, vector<const ofbx::Object*> &limbVe
 		return;
 	}
 	
+	for (int i = 0; const ofbx::Object * child = limb->resolveObjectLink(i); i++) {
+		if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
+			const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
+			for (int j = 0; j < 3; j++) {
+				const ofbx::AnimationCurve* curve = node->getCurve(j);
+				if (curve == nullptr) {
+					continue;
+				}
+				int key_count = curve->getKeyCount();
+				if (key_count > key_count_max) {
+					key_count_max = key_count;
+				}
+			}
+			++i;
+		}
+	}
+
 	limbVec.push_back(limb);
 	limbMap[limb] = (int)limbMap.size();
 	const ofbx::Object *parent = limb->getParent();
@@ -1306,6 +1323,16 @@ void resolve_limb_nodes(const ofbx::IScene* scene) {
 	
 	while (const ofbx::Object* child = scene->getRoot()->resolveObjectLink(i)) {
 
+		if (child->getType() == ofbx::Object::Type::NULL_NODE) {
+
+			for (int j = 0; const ofbx::Object * grand_child = child->resolveObjectLink(j); j++) {
+				if (grand_child->getType() == ofbx::Object::Type::LIMB_NODE) {
+					child = grand_child;
+					break;
+				}
+			}
+		}
+
 		// Used for extracting fbx file from blender
 		/*
 		if (child->name[0] == 'A') {
@@ -1322,19 +1349,21 @@ void resolve_limb_nodes(const ofbx::IScene* scene) {
 	}
 	
 
-	// Get key count for root limb
-	for (int i = 0; const ofbx::Object * child = root->resolveObjectLink(i); i++) {
-		if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
-			const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
-			const ofbx::AnimationCurve* curveX = node->getCurve(0);
-			if (curveX == nullptr) {
-				++i;
-				continue;
-			}
-			key_count_max = curveX->getKeyCount();
+	// Get maximam key count for all limbs
 
-		}
-	}
+	//for (int i = 0; const ofbx::Object * child = root->resolveObjectLink(i); i++) {
+
+	//	if (child->getType() == ofbx::Object::Type::ANIMATION_CURVE_NODE) {
+	//		const ofbx::AnimationCurveNode* node = (ofbx::AnimationCurveNode*)child;
+	//		const ofbx::AnimationCurve* curveX = node->getCurve(0);
+	//		if (curveX == nullptr) {
+	//			++i;
+	//			continue;
+	//		}
+	//		key_count_max = curveX->getKeyCount();
+
+	//	}
+	//}
 
 	// Traverse hierarchy and store the skeleton structure for later use
 	traverseLimbs(root, limbVec, limbMap, limbParents);
