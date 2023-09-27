@@ -536,7 +536,8 @@ void traverseLimbs(const ofbx::Object *limb, vector<const ofbx::Object*> &limbVe
 	}
 
 	limbVec.push_back(limb);
-	limbMap[limb] = (int)limbMap.size();
+	int limbMapSize = (int)limbMap.size();
+	limbMap[limb] = limbMapSize;
 	const ofbx::Object *parent = limb->getParent();
 	if(parent != nullptr && parent->getType() == ofbx::Object::Type::LIMB_NODE) {
 		limbParents.push_back(limbMap[parent]);

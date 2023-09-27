@@ -84,11 +84,15 @@ To build the project, run `cmake` and `make`, and then run with the FBX file as 
 ### Textures
 
 - All of the textures contained in the input FBX file, usually are PNG or JPG files.
+- The files downloaded from Mixamo may not contain any textures. The steps to solve this are (thanks to Yuanlong Zhou):
+  - Click "Characters" from the tab on the Mixamo website.
+  - Choose your favorite character and then choose its corresponding "Animations."
+  - Download the .fbx file, rather than downloading it directly from the main page.
 
 
 ### Input file
 
-- The input information for this [Assignment](https://people.engr.tamu.edu/sueda/courses/CSCE489/2021F/assignments/A2/index.html). 
+- The input information for this [Assignment](https://people.engr.tamu.edu/sueda/courses/CSCE450/2023F/assignments/A2/index.html). 
 - This file only lists the name of the first extracted texture. If it is not the ideal one, please edit it manually.
 
 
